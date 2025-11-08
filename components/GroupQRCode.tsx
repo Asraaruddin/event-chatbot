@@ -7,7 +7,8 @@ interface GroupQRCodeProps {
 }
 
 export default function GroupQRCode({ groupId }: GroupQRCodeProps) {
-  const chatUrl = `https://boomi-ai.vercel.app/chat?group=${groupId}`;
+  const chatUrl = ` https://event-chatbot-rho.vercel.app/chat?group=${groupId}`; 
+ 
 
 
   return (
