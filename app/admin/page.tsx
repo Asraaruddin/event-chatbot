@@ -1,6 +1,8 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { Send, Pencil, Trash2, Upload } from "lucide-react";
 
 type AppUser = {
   id: string;
@@ -10,8 +12,10 @@ type AppUser = {
 };
 
 type Announcement = {
+  id?: string;
   title: string;
   message: string;
+  created_at?: string;
 };
 
 export default function AdminDashboard() {
@@ -20,11 +24,13 @@ export default function AdminDashboard() {
     title: "",
     message: "",
   });
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [uploading, setUploading] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<string>(""); // ✅ client-safe timestamp
+  const [lastUpdated, setLastUpdated] = useState<string>("");
 
-  // ✅ Fetch users_app (QR scanned users)
+  // Fetch users
   useEffect(() => {
     const fetchUsers = async () => {
       const { data, error } = await supabase.from("users_app").select("*");
@@ -33,27 +39,55 @@ export default function AdminDashboard() {
     fetchUsers();
   }, []);
 
-  // ✅ Set client-side time (avoids hydration mismatch)
+  // Fetch announcements
+  const fetchAnnouncements = async () => {
+    const { data, error } = await supabase
+      .from("announcements")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!error && data) setAnnouncements(data);
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+
+  // Update client-side timestamp
   useEffect(() => {
     const updateTime = () => setLastUpdated(new Date().toLocaleString());
     updateTime();
-    const interval = setInterval(updateTime, 1000 * 60); // updates every 1 min
+    const interval = setInterval(updateTime, 1000 * 60);
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ Handle announcement send
-  const sendAnnouncement = async (e: React.FormEvent) => {
+  // Announcement handlers
+  const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!announcement.message.trim()) return alert("Please enter a message.");
-    const { error } = await supabase.from("announcements").insert([announcement]);
-    if (error) alert("Failed to send announcement ❌");
-    else {
-      alert("Announcement sent! 📢");
-      setAnnouncement({ title: "", message: "" });
+
+    if (editingId) {
+      await supabase.from("announcements").update(announcement).eq("id", editingId);
+      setEditingId(null);
+    } else {
+      await supabase.from("announcements").insert([announcement]);
     }
+
+    setAnnouncement({ title: "", message: "" });
+    fetchAnnouncements();
   };
 
-  // ✅ Handle file upload and extract text
+  const handleEditAnnouncement = (a: Announcement) => {
+    setEditingId(a.id || null);
+    setAnnouncement({ title: a.title, message: a.message });
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!confirm("Delete this announcement?")) return;
+    await supabase.from("announcements").delete().eq("id", id);
+    fetchAnnouncements();
+  };
+
+  // File upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -64,7 +98,6 @@ export default function AdminDashboard() {
       const text = await file.text();
       setFileContent(text);
 
-      // Store extracted content in Supabase for bot context
       const { error } = await supabase.from("event_files").insert([
         {
           file_name: file.name,
@@ -87,44 +120,41 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-6">
-      <div className="max-w-5xl mx-auto space-y-8">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">
+    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-50 py-12 px-6">
+      <div className="max-w-6xl mx-auto space-y-10">
+
+        {/* Dashboard Header */}
+        <h1 className="text-4xl md:text-5xl font-extrabold text-center text-gray-800 mb-6">
           🎛️ Admin Dashboard
         </h1>
 
-        {/* Overview Cards */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl shadow p-6 text-center">
-            <h2 className="font-semibold text-xl mb-2">📱 App Users</h2>
-            <p className="text-gray-600 mb-3">
-              People who scanned the QR & used the bot:
-            </p>
-            <div className="text-4xl font-bold text-blue-600">
-              {appUsers.length}
-            </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 shadow-lg rounded-2xl p-6 text-white hover:scale-105 transition transform">
+            <h2 className="text-xl md:text-2xl font-semibold mb-2">📱 App Users</h2>
+            <p className="text-white/80 mb-3">People who scanned the QR & used the bot:</p>
+            <div className="text-4xl md:text-5xl font-bold">{appUsers.length}</div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow p-6 text-center">
-            <h2 className="font-semibold text-xl mb-2">🕒 Last Update</h2>
-            <p className="text-gray-600 mb-3">
-              Real-time engagement stats updated automatically.
-            </p>
-            {/* ✅ Render only after hydration */}
+          <div className="bg-gradient-to-r from-green-500 to-emerald-500 shadow-lg rounded-2xl p-6 text-white hover:scale-105 transition transform">
+            <h2 className="text-xl md:text-2xl font-semibold mb-2">🕒 Last Update</h2>
+            <p className="text-white/80 mb-3">Real-time engagement stats updated automatically.</p>
             {lastUpdated ? (
-              <div className="text-lg font-medium text-green-600">
-                {lastUpdated}
-              </div>
+              <div className="text-lg md:text-xl font-medium">{lastUpdated}</div>
             ) : (
-              <div className="text-gray-400 text-sm">Loading...</div>
+              <div className="text-white/60 text-sm">Loading...</div>
             )}
           </div>
         </div>
 
         {/* Announcement Section */}
-        <div className="bg-white rounded-2xl shadow p-6">
-          <h2 className="font-semibold text-xl mb-4">📢 Send Announcement</h2>
-          <form onSubmit={sendAnnouncement} className="space-y-3">
+        <div className="bg-white shadow-lg rounded-2xl p-8 hover:shadow-2xl transition">
+          <h2 className="text-2xl md:text-3xl font-semibold mb-6 flex items-center gap-2">
+            📢 Announcements
+          </h2>
+
+          {/* Announcement Form */}
+          <form onSubmit={handleSaveAnnouncement} className="space-y-4">
             <input
               type="text"
               placeholder="Title (optional)"
@@ -132,7 +162,7 @@ export default function AdminDashboard() {
               onChange={(e) =>
                 setAnnouncement({ ...announcement, title: e.target.value })
               }
-              className="border p-2 rounded w-full focus:ring-2 focus:ring-blue-400"
+              className="border p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-400 focus:outline-none"
             />
             <textarea
               placeholder="Type your message..."
@@ -140,39 +170,77 @@ export default function AdminDashboard() {
               onChange={(e) =>
                 setAnnouncement({ ...announcement, message: e.target.value })
               }
-              className="border p-2 rounded w-full h-24 focus:ring-2 focus:ring-blue-400"
+              className="border p-3 rounded-lg w-full h-28 focus:ring-2 focus:ring-blue-400 focus:outline-none"
             />
             <button
               type="submit"
-              className="bg-blue-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition transform hover:scale-105"
             >
-              Send Announcement
+              <Send size={18} />
+              {editingId ? "Update Announcement" : "Send Announcement"}
             </button>
           </form>
+
+          {/* Announcement List */}
+          <div className="mt-6 space-y-3">
+            {announcements.map((a) => (
+              <div
+                key={a.id}
+                className="bg-gray-50 p-4 rounded-lg shadow hover:shadow-md transition flex flex-col md:flex-row justify-between items-start md:items-center"
+              >
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-800 text-lg">{a.title || "Untitled"}</h3>
+                  <p className="text-gray-600 mt-1">{a.message}</p>
+                  <span className="text-sm text-gray-400">
+                    {a.created_at ? new Date(a.created_at).toLocaleString() : ""}
+                  </span>
+                </div>
+                <div className="flex gap-2 mt-3 md:mt-0">
+                  <button
+                    onClick={() => handleEditAnnouncement(a)}
+                    className="p-2 border border-gray-300 rounded hover:bg-gray-100 transition"
+                  >
+                    <Pencil size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAnnouncement(a.id!)}
+                    className="p-2 border border-red-400 text-red-500 rounded hover:bg-red-50 transition"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* File Upload Section */}
-        <div className="bg-white rounded-2xl shadow p-6">
-          <h2 className="font-semibold text-xl mb-4">📄 Upload Event File</h2>
-          <p className="text-gray-600 mb-3">
+        <div className="bg-white shadow-lg rounded-2xl p-8 hover:shadow-2xl transition">
+          <h2 className="text-2xl md:text-3xl font-semibold mb-4 flex items-center gap-2">
+            📄 Upload Event File
+          </h2>
+          <p className="text-gray-600 mb-4">
             Upload a text, CSV, or PDF file to feed data into the bot (e.g.
-            schedule, speaker list, FAQs). The content will be extracted and
-            stored in Supabase for chatbot use.
+            schedule, speaker list, FAQs). The content will be extracted and stored in Supabase.
           </p>
           <input
             type="file"
             accept=".txt,.csv,.pdf"
             onChange={handleFileUpload}
             disabled={uploading}
-            className="border p-2 rounded w-full"
+            className="border p-3 rounded-lg w-full md:w-auto mb-3"
           />
-          {uploading && (
-            <p className="text-blue-500 mt-2">Uploading and extracting...</p>
-          )}
+          <button
+            disabled={uploading}
+            className="flex items-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+          >
+            <Upload size={18} />
+            {uploading ? "Uploading..." : "Upload"}
+          </button>
           {fileContent && (
-            <div className="mt-3 bg-gray-100 p-3 rounded text-sm overflow-auto max-h-40">
+            <div className="mt-5 bg-gray-100 p-4 rounded-lg text-sm max-h-56 overflow-auto">
               <b>Extracted Content Preview:</b>
-              <p className="whitespace-pre-wrap mt-1 text-gray-700">
+              <p className="mt-2 whitespace-pre-wrap text-gray-800">
                 {fileContent.slice(0, 500)}...
               </p>
             </div>
