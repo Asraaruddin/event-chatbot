@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import MessageBubble from "./MessageBubble";
 import InputBox from "./InputBox";
 
@@ -23,6 +22,27 @@ export default function ChatWindow({ groupId, eventName }: ChatWindowProps) {
   const [username, setUsername] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Dummy event data
+  const eventData = {
+    speakers: [
+      { name: "Alice Johnson", bio: "AI Researcher at OpenAI" },
+      { name: "Bob Smith", bio: "Fullstack Developer at TechCorp" },
+      { name: "Carol Lee", bio: "Entrepreneur & Startup Mentor" },
+    ],
+    schedule: [
+      { time: "10:00 AM", activity: "Opening Keynote" },
+      { time: "11:30 AM", activity: "Workshop: AI & ML" },
+      { time: "2:00 PM", activity: "Hackathon Begins" },
+      { time: "5:00 PM", activity: "Project Demos" },
+    ],
+    venue: "Tech Convention Center, Hall 3, Downtown City",
+    participants: [
+      { name: "Dev Team Alpha", idea: "Smart Recycling App" },
+      { name: "Team Beta", idea: "Blockchain Voting Platform" },
+      { name: "Team Gamma", idea: "AI Chatbot for Education" },
+    ],
+  };
+
   useEffect(() => {
     setMessages([
       { sender: "bot", text: "👋 Hi there! I'm your Event Assistant. What's your name?" },
@@ -33,42 +53,43 @@ export default function ChatWindow({ groupId, eventName }: ChatWindowProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (text: string) => {
+  const handleSend = (text: string) => {
     if (!text.trim()) return;
-
-    if (!username) {
-      setUsername(text);
-      const safeGroup = groupId || "default";
-      await supabase.from("users_app").insert([{ name: text, group_id: safeGroup }]);
-
-      setMessages((prev) => [
-        ...prev,
-        { sender: "user", text },
-        {
-          sender: "bot",
-          text: `Nice to meet you, ${text}! 🎉 Welcome to ${eventName || "our event"}! You’re now registered for group "${safeGroup}".`,
-        },
-        {
-          sender: "bot",
-          text: "Ask me anything about the event — speakers, schedule, or venue!",
-        },
-      ]);
-      return;
-    }
 
     setMessages((prev) => [...prev, { sender: "user", text }]);
     setIsTyping(true);
 
     setTimeout(() => {
+      let response = "Sorry, I don't understand that yet. 😅";
+
+      if (!username) {
+        setUsername(text);
+        response = `Nice to meet you, ${text}! 🎉 Welcome to ${eventName || "our event"}! Ask me anything about speakers, schedule, or venue.`;
+      } else {
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes("speaker") || lowerText.includes("speakers")) {
+          response = eventData.speakers
+            .map((s) => `• ${s.name}: ${s.bio}`)
+            .join("\n");
+        } else if (lowerText.includes("schedule") || lowerText.includes("agenda")) {
+          response = eventData.schedule
+            .map((s) => `• ${s.time} → ${s.activity}`)
+            .join("\n");
+        } else if (lowerText.includes("venue") || lowerText.includes("location")) {
+          response = `📍 Venue: ${eventData.venue}`;
+        } else if (lowerText.includes("participants") || lowerText.includes("teams")) {
+          response = eventData.participants
+            .map((p) => `• ${p.name} → ${p.idea}`)
+            .join("\n");
+        }
+      }
+
       setMessages((prev) => [
         ...prev,
-        {
-          sender: "bot",
-          text: `That's interesting! I'll help you find more info about "${text}".`,
-        },
+        { sender: "bot", text: response },
       ]);
       setIsTyping(false);
-    }, 1200);
+    }, 1000);
   };
 
   return (
