@@ -14,6 +14,7 @@ interface Message {
 interface ChatWindowProps {
   groupId: string;
   eventName: string;
+    userName?: string; // ✅ Add this line
 }
 
 export default function ChatWindow({ groupId, eventName }: ChatWindowProps) {
